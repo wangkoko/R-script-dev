@@ -39,6 +39,8 @@ if (isTRUE(do_pick)) {
   f_name <- paste(f_name, sep = "", ".csv")
   write.csv(pick_today_2, file = f_name)
   print("> Pick end!")
+  # pick_all[pick_all$Prof < 0,]
+  win_rate <- sum(ifelse(pick_all$'Prof'>=0, 1, 0))/nrow(pick_all)
 }
 
 # Test performance
@@ -56,8 +58,6 @@ if (isTRUE(do_perf_check)) {
   perf_all <- perf_all[order(as.numeric(perf_all[,'per']), decreasing = TRUE),]
   perf_mean <- mean(as.numeric(perf_all[,'per']))
   write.csv(perf_all, file = "perf_all.csv")
-  # pick_all[pick_all$Prof < 0,]
-  win_rate <- sum(ifelse(pick_all$'Prof'>=0, 1, 0))/nrow(pick_all)
 }
 
 # see single stock analysis
