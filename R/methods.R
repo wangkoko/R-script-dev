@@ -8,12 +8,14 @@ GET_LIST <- function(path = 'info/sTW_list.csv')
   idx$No <- str_extract(idx$No, "[0-9]+")
   return(idx)
 }
-bypass <- c(5258)
+
 #Strategy
-ANALYSIS_STRATEGY <- function(cata ='TW', id, region)
+ANALYSIS_STRATEGY <- function(cata ='TW', id = 2337, region = 180)
 {
+
   #define
-  cNull <- c(id, NA, NA)
+  bypass <- c(5258, 4171)
+  cNull <- c(id, NA, NA, NA)
 
   #ignore id
   for(i in 1:length(bypass))
@@ -21,10 +23,10 @@ ANALYSIS_STRATEGY <- function(cata ='TW', id, region)
     if(id == bypass[i])  return(cNull)
   }
 
-  TEST_REGION <- GET_TEST_REGION(region)
+  TEST_REGION <- GET_TEST_REGION(days = region)
 
   try.xts(
-    sdata <- GET_DATA(id, cata, year = 3, month = 0),
+    sdata <- GET_DATA(id, cata, year = 1, month = 0),
     error =  sdata <- NULL
   )
   if(is.null(sdata) || length(sdata[,4]) < 60*1.5){
@@ -38,17 +40,6 @@ ANALYSIS_STRATEGY <- function(cata ='TW', id, region)
     error =  ma_pos <- NULL
   )
   if(is.null(ma_pos) || length(ma_pos) < 1){
-    print("E1: ")
-    return(cNull)
-  }
-
-  #2. close > ma_x
-  try.xts(
-    clma_pos <- na.omit(GET_CLMA_CMP_POS(sdata, tgt = 60)[TEST_REGION]),
-    error = clma_pos <- NULL
-  )
-  if(is.null(clma_pos) || length(clma_pos) < 1){
-    print("E2")
     return(cNull)
   }
 
@@ -56,7 +47,7 @@ ANALYSIS_STRATEGY <- function(cata ='TW', id, region)
   bb_pos <- na.omit(GET_BBand_POS(sdata)[TEST_REGION])
 
   #4. volume - 5 ave. > 20 ave. buy & keep, otherwise, sell
-  vol_pos <- (GET_VOLUME_POS(sdata, ma_vt = 5, ma_vr = 20)[TEST_REGION])
+  vol_pos <- (GET_VOLUME_POS(sdata)[TEST_REGION])
 
   #Hold
   hold_pos <- ifelse(ma_pos & bb_pos & vol_pos, 1, 0)
@@ -71,16 +62,22 @@ ANALYSIS_STRATEGY <- function(cata ='TW', id, region)
   else
   {
     plot(eq)
-    print(c(id, round(last_eq - 1, 2), round((last_eq - 1)/hold_time * 100, 2)))
-    return(c(id, round(last_eq - 1, 2), round((last_eq - 1)/hold_time * 100, 2)))
+    print(c(id, round((last_eq - 1) * 100, 2), round((last_eq - 1)/hold_time * 100, 2), hold_time))
+    return(c(id, round((last_eq - 1) * 100, 2), round((last_eq - 1)/hold_time * 100, 2), hold_time))
   }
 }
 
-GET_VOLUME_POS <-function(sdata, ma_vt = 5, ma_vr = 20)
+GET_VOLUME_POS <-function(sdata)
 {
-  ma_vt_pos <- runMean(sdata[,5], n = ma_vt)
-  ma_vr_pos <- runMean(sdata[,5], n = ma_vr)
-  return(ma_vt_pos > ma_vr_pos)
+  vol5_pos <- runMean(sdata[,5], n = 5)
+  vol10_pos <- runMean(sdata[,5], n = 10)
+  vol20_pos <- runMean(sdata[,5], n = 20)
+  #return(ma_vt_pos > ma_vr_pos)
+
+  abs_vol_pos <- ifelse(sdata[,5] > vol10_pos, 1, 0)
+  vol5_pos <- vol5_pos > vol20_pos
+
+  return(abs_vol_pos & vol5_pos)
 }
 
 GET_TEST_REGION <- function(days = 12 * 30)
@@ -108,23 +105,28 @@ GET_DATA <-function(id, cata = 'TW', year = 10, month = 0)
   return(na.omit(data))
 }
 
-GET_CLMA_CMP_POS <- function(sdata, tgt = 60)
-{
-  tgt_ma <- runMean(sdata[,4], tgt)
-  return(lag(sdata[,4], k = tgt) >= tgt_ma)
-}
 
-GET_BBand_POS <- function(sdata, n = 22, sd = 1.5, hold = TRUE)
+GET_BBand_POS <- function(sdata, n = 22, sd = 1.5, Mode = 0)
 {
   hlc <- sdata[, -c(1,5,6)]
   bb_data <- na.omit(BBands(na.omit(hlc), maType = 'SMA', n, sd))
 
-  buy <- na.omit(Lag(Cl(sdata))>Lag(bb_data$"up"))
-  bb_pos <- buy
-  if(hold){
-    keep <- na.omit(Lag(Cl(sdata))>Lag(bb_data$"mavg"))
-    bb_pos <- GET_BBand_HOLD_POS(buy, keep)
+  if(Mode == 1){
+    buy <- na.omit(Cl(sdata)>bb_data$"up")
   }
+  else{
+    buy <- na.omit(Lag(Cl(sdata))>Lag(bb_data$"up"))
+  }
+
+  if(Mode == 1){
+    keep <- na.omit(Cl(sdata)>bb_data$"mavg")
+  }
+   else
+   {
+     keep <- na.omit(Lag(Cl(sdata))>Lag(bb_data$"mavg"))
+   }
+
+  bb_pos <- GET_BBand_HOLD_POS(buy, keep)
   return(bb_pos)
 }
 
@@ -161,7 +163,8 @@ GET_MA_POS <- function(sdata, tgt = 20, ref = 60)
   tgt_ma <- runMean(sdata[,4], n = tgt)
   ref_ma <- runMean(sdata[,4], n = ref)
   ma_pos <- tgt_ma > ref_ma
-  return(ma_pos)
+  up_ma <- runMean(sdata[,4], n = 60)
+  return(ma_pos & up_ma)
 }
 
 GET_MA_Vol_POS <- function(sdata, tgt = 5)
