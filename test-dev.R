@@ -11,8 +11,8 @@ if (isTRUE(do_pick)) {
   print(c("> start pick", today))
   # pick <- do.call(rbind, lapply(head(tw_list$No, n=28), FUN=pick_strategy, cata = 'TW', pick = TRUE))
   # pick_otc <- do.call(rbind, lapply(head(two_list$No, n=10), FUN=pick_strategy, cata = 'TWO', pick = TRUE))
-  pick <- do.call(rbind, lapply(tw_list$No, FUN=pick_strategy2, cata = 'TW', pick = TRUE))
-  pick_otc <- do.call(rbind, lapply(two_list$No, FUN=pick_strategy2, cata = 'TWO', pick = TRUE))
+  pick <- do.call(rbind, lapply(tw_list$No, FUN=pick_strategy4, cata = 'TW', pick = TRUE))
+  pick_otc <- do.call(rbind, lapply(two_list$No, FUN=pick_strategy4, cata = 'TWO', pick = TRUE))
 
   # fix NA value
   pick <- na.omit(pick)
@@ -21,6 +21,8 @@ if (isTRUE(do_pick)) {
 
   # Get those stock is NOT held yesterday but DO held today
   pick_today <- pick_all[pick_all$'T'==1,]
+  pick_today_2 <- pick_all[pick_all$'T'==1&pick_all$'T-1'==1,]
+  pick_today_vol <- pick_today_2[pick_today_2$'Vo'>500,]
   # order with column var
   pick_all <- pick_all[with(pick_all, order(var)), ]
   pick_today <- pick_today[with(pick_today, order(var)), ]
