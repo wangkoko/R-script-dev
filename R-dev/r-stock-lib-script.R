@@ -25,7 +25,7 @@ get_stock_hist <- function(stock_id, month = 8, years = 0, ed = Sys.time()) {
   day(ed_date) <- day(ed_date) + 1
   ed_date <- format(ed_date, "%Y-%m-%d")
   # print(paste(st_date, sep = " to ", ed_date))
-  print(c(stock_id, st_date, ed_date))
+  # print(c(stock_id, st_date, ed_date))
   # stock_hist = suppressWarnings(getSymbols(stock_id, auto.assign = FALSE, from = st_date))
 
   stock_hist = tryCatch({
@@ -153,7 +153,7 @@ pick_strategy4 <- function(stock_name, cata = 'TW'
   tangle10 <- (ma10<bb_data$'up') & (ma10>bb_data$'dn')
   tangle20 <- (ma20<bb_data$'up') & (ma20>bb_data$'dn')
   tangle60 <- (ma60<bb_data$'up') & (ma60>bb_data$'dn')
-  close <- (Op(hist)<bb_data$'up') & (Cl(hist)>bb_data$'mavg')
+  close <- (Cl(hist)<bb_data$'up') & (Cl(hist)>bb_data$'mavg')
   ma_hold <- bull[test_period] & close[test_period] & tangle5[test_period] & tangle10[test_period] & tangle20[test_period] & tangle60[test_period]
   # print(ma_hold)
   ma_hold <- na.omit(ma_hold)
@@ -358,20 +358,18 @@ pick_strategy <- function(stock_name, cata = 'TW'
     if (!(cata == ''))
       stock_name <- paste(stock_name, sep = ".", cata)
     hist <- get_stock_hist(stock_name, month+4, years, ed = from)
-    print(stock_name)
+    # print(stock_name)
     if (is.null(colnames(hist))||is.na(hist)) {
       print("WARN: cannot download stock")
       return(NA)
     }
     # print(hist)
   }
-
   test_period <- get_test_period(month = month, years = years, from = from)
-  # print(bb_data)
-  #1. b-band
-  hlc <- hist[, -c(1,5,6)]
+  hlc <- cbind(Hi(hist), Lo(hist), Cl(hist))
   # print(hlc)
-  if (nrow(hist)<n) {
+  # for 60 ma
+  if (nrow(hist)<60) {
     print("> ERROR:: not enough data to calculate SMA")
     return(NA)
   }
@@ -379,15 +377,14 @@ pick_strategy <- function(stock_name, cata = 'TW'
   bb_hold <- na.omit(Cl(hist)>bb_data$"up")
 
   #2. ma x > ma y
-  ma_hold <- GET_MA_POS_EXT(hist, tgt = 20, ref = 60)
-  if (is.null(ma_hold))
-    return(NA)
+  ma20 <- runMean(Cl(hist), n = 20)
+  ma60 <- runMean(Cl(hist), n = 60)
+  ma_hold <- na.omit(ma20 > ma60)
 
+  test_period <- paste(head(index(ma_hold),n=1), sep = '::', tail(index(ma_hold),n=1))
+  print(paste(stock_name, sep = ': ', test_period))
   #3. volume - 5 ave. > 20 ave. buy & keep, otherwise, sell
   # vol_hold <- GET_VOLUME_POS_EXT(hist)
-  vol_hold <- rep(1, nrow(bb_hold))
-  if (is.null(vol_hold))
-    return(NA)
 
   # check hold
   # hold <- bb_hold & ma_hold & vol_hold
