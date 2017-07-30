@@ -1,21 +1,60 @@
 source("R-dev/r-stock-lib-script.R")
 # strategy for break through shortern, strategy4 for longtern
 do_pick = TRUE
-do_perf_check = FALSE
-file_name1 = 'pick-today1-strategy1'
-file_name2 = 'pick-today2-strategy1'
-file_name_vol = 'pick-today-vol-strategy1'
+PROF_VERIFY = TRUE
+file_name1 = 'pick-today1-strategy5'
+file_name2 = 'pick-today2-strategy5'
+file_name3 = 'pick-today3-strategy5'
 # Get stock exchange market index
 tw_list <- get_stock_list();
 two_list <- get_stock_list(cata = 'TWO')
+# for new stratgy
+#  pick candidate new strategy, only for strategy5
+if (isTRUE(do_pick)) {
+  today <- format(Sys.time(), "%Y-%m-%d")
+  print(c("> start pick", today))
+  # pick <- do.call(rbind, lapply(head(tw_list$No, n=28), FUN=pick_strategy, cata = 'TW', pick = TRUE))
+  # pick_otc <- do.call(rbind, lapply(head(two_list$No, n=10), FUN=pick_strategy, cata = 'TWO', pick = TRUE))
+  pick <- do.call(rbind, lapply(tw_list$No, FUN=pick_strategy5, cata = 'TW', pick = TRUE, prof_verify = PROF_VERIFY))
+  pick_otc <- do.call(rbind, lapply(two_list$No, FUN=pick_strategy5, cata = 'TWO', pick = TRUE, prof_verify = PROF_VERIFY))
+
+  # fix NA value
+  pick <- na.omit(pick)
+  pick_otc <- na.omit(pick_otc)
+  pick_all <- rbind(pick, pick_otc)
+
+  # Get those stock is NOT held yesterday but DO held today
+  pick_today_buy <- pick_all[pick_all$'Buy'==1,]
+  pick_today_add <- pick_all[pick_all$'Add'==1,]
+  # order with column var
+  # pick_all <- pick_all[with(pick_all, order(var)), ]
+  pick_today_buy <- pick_today_buy[with(pick_today, order(var)), ]
+  pick_today_add <- pick_today_add[with(pick_today_add, order(var)), ]
+  # pick_all_prof <- pick_all[with(pick_all, order(Prof, decreasing = TRUE)), ]
+  # write to file
+  f_name <- paste("pick-buy", sep = "", today)
+  f_name <- paste(f_name, sep = "", ".csv")
+  write.csv(pick_today_buy, file = f_name)
+
+  f_name <- paste("pick-add", sep = "-", today)
+  f_name <- paste(f_name, sep = "", ".csv")
+  write.csv(pick_today_add, file = f_name)
+  print("> Pick end!")
+  # pick_all[pick_all$Prof < 0,]
+  prof_mean <- mean(as.numeric(pick_all$'Prof'))
+  win_rate <- sum(ifelse(pick_all$'Prof'>=0, 1, 0))/nrow(pick_all)
+}
+## latest version end
+
+
 #  pick candidate
 if (isTRUE(do_pick)) {
   today <- format(Sys.time(), "%Y-%m-%d")
   print(c("> start pick", today))
   # pick <- do.call(rbind, lapply(head(tw_list$No, n=28), FUN=pick_strategy, cata = 'TW', pick = TRUE))
   # pick_otc <- do.call(rbind, lapply(head(two_list$No, n=10), FUN=pick_strategy, cata = 'TWO', pick = TRUE))
-  pick <- do.call(rbind, lapply(tw_list$No, FUN=pick_strategy, cata = 'TW', pick = TRUE))
-  pick_otc <- do.call(rbind, lapply(two_list$No, FUN=pick_strategy, cata = 'TWO', pick = TRUE))
+  pick <- do.call(rbind, lapply(tw_list$No, FUN=pick_strategy5, cata = 'TW', pick = TRUE))
+  pick_otc <- do.call(rbind, lapply(two_list$No, FUN=pick_strategy5, cata = 'TWO', pick = TRUE))
 
   # fix NA value
   pick <- na.omit(pick)
@@ -75,7 +114,8 @@ if (isTRUE(do_perf_check)) {
 # see single stock analysis
 # source("R-dev/r-stock-lib-script.R")
 # pick_strategy('1216', cata = 'TW', draw = TRUE)
-# pos_plot('2834', cata = 'TW', month = 4, years = 0, from = Sys.time(), FUNC = pick_strategy2)
+# pos_plot('2337', cata = 'TW', month = 0, years = 1, from = Sys.time(), FUNC = pick_strategy5)
+# pick_strategy5('2337', cata = 'TW', prof_verify = TRUE, pick = TRUE)
 if (isTRUE(do_pick)) {
   plot_show <- lapply(rownames(pick_today), FUN=pos_plot, cata = '', FUNC = pick_strategy2)
 }

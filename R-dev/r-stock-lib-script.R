@@ -99,10 +99,137 @@ pos_plot <- function(stock_name, cata = 'TW', month = 4, years = 0, from = Sys.t
   plot(addTA(hold_price[show_period],on=1,col=5))
   invisible(readline(prompt="Press [enter] to continue"))
 }
+# buy add sell
+pick_strategy5 <- function(stock_name, cata = 'TW'
+                           , hist = NULL, n = 22, sd = 1.5
+                           , month = 0, years = 1, from = Sys.time(), pick = FALSE, prof_verify=FALSE) {
+  if (is.null(hist)) {
+    if (!(cata == ''))
+      stock_name <- paste(stock_name, sep = ".", cata)
+    hist <- get_stock_hist(stock_name, month+6, years, ed = from)
+    # print(stock_name)
+    if (is.null(colnames(hist))||is.na(hist)) {
+      print("WARN: cannot download stock")
+      return(NA)
+    }
+    # print(hist)
+  }
+
+  test_period <- get_test_period(month = month, years = years, from = from)
+  # print(test_period)
+  hlc <- cbind(Hi(hist), Lo(hist), Cl(hist))
+
+  # need to use 120 ma in rising
+  if (nrow((hist)) < 120) {
+    print(paste("> ERROR:: not enough data to calculate SMA", sep = ' ', nrow(hist)))
+    return(NA)
+  }
+  # 0. prepare data for later calculation
+  bb_data <- BBands(hlc, maType = 'SMA', n = n, sd = sd)
+  ma5 <- runMean(Cl(hist), n = 5)
+  ma10 <- runMean(Cl(hist), n = 10)
+  ma20 <- runMean(Cl(hist), n = 20)
+  ma60 <- runMean(Cl(hist), n = 60)
+  ma120 <- runMean(Cl(hist), n = 120)
+
+  # criteria 1. get desired bband range
+  bb_var <- (bb_data$'up' - bb_data$'dn')/bb_data$'mavg'
+  bb_var_limit <- ifelse(bb_var <= 0.15, 1, 0)
+  bb_var_limit <- na.omit(bb_var_limit)
+  # print(bb_var_limit)
+
+  # criteria 2. get desired sma tangling within bbands
+  tangle5 <- (ma5<bb_data$'up') & (ma5>bb_data$'dn')
+  tangle10 <- (ma10<bb_data$'up') & (ma10>bb_data$'dn')
+  tangle20 <- (ma20<bb_data$'up') & (ma20>bb_data$'dn')
+  tangle60 <- (ma60<bb_data$'up') & (ma60>bb_data$'dn')
+  tangle_close <- (Cl(hist)<bb_data$'up') & (Cl(hist)>bb_data$'mavg')
+  ma_limit <- tangle_close[test_period] & tangle5[test_period] & tangle10[test_period] & tangle20[test_period]# & tangle60[test_period]
+  ma_limit <- na.omit(ma_limit)
+
+  # criteria 3. get rising trend
+  rising <- na.omit(ma60 > ma120)
+
+  # 4. get valid period by the longest range 120 ma
+  valid_from <- head(index(rising),n=1)
+  valid_to <- tail(index(rising),n=1)
+  test_period <- paste(valid_from, sep = '::', valid_to)
+  print(paste(stock_name, sep = ': ', test_period))
+
+  # 5. check buy_range
+  buy_range <- bb_var_limit[test_period] & ma_limit[test_period] & rising[test_period]
+  # debug for each criteria
+  # buy_range <- bb_var_limit[test_period]
+  # buy_range <- ma_limit[test_period]
+  # buy_range <- rising[test_period]
+  # print(buy_range) # debug for holding point
+  # 5-1. check add_range
+  # print(tail(Cl(hist), n=10))
+  # print(tail(bb_data$"up", n=10))
+  add_range <- na.omit(Cl(hist)>bb_data$"up")
+  # 6. check hold range
+  hold_range <- Cl(hist) > bb_data$"dn"
+  hold_range <- hold_range[test_period]
+  # print(hold_range)
+
+  # 7. check whole period if buy_range happened then hold_range
+  total_range <- buy_range
+  bought <- FALSE
+  if (isTRUE(prof_verify)) {
+    for (idx in index(hold_range)) {
+      idx <- format(as.Date(idx), "%Y-%m-%d")
+      if (total_range[idx] == TRUE)
+        bought <- TRUE
+      if (isTRUE(bought)) {
+        total_range[idx] <- buy_range[idx] | hold_range[idx] | add_range[idx]
+        if (total_range[idx] <= 0)
+          bought <- FALSE
+      }
+    }
+  }
+  pos_hold <- ifelse(total_range, 1, 0)
+  # print(pos_hold)
+  if(isTRUE(pick)) {
+    # holding position
+    last_2pos <- as.numeric(tail(pos_hold, n=2))
+    last_2add <- as.numeric(tail(add_range, n=2))
+    last_buy <- as.numeric(tail(buy_range, n=1))
+    # print(tail(add_range,n=10))
+    # volumn of last day for the stock
+    vol <- (as.numeric(tail(Vo(hist), n=1))/1000)*tail(Cl(hist), n=1)
+    # calculate the profit
+    # print(tail(pos_hold, n=10))
+    # 8. to align the correct gain/loss when we can actually made decision to buy/sell
+    buy <- na.omit(Lag(Lag(pos_hold)))
+    # print(tail(buy, n=10))
+    buy <- ifelse(buy, 1, 0)
+    op_hist <- na.omit(Op(hist))
+    colnames(op_hist) <- "Open"
+    # print(tail(op_hist,n=10))
+    prof_persent <- OpOp(op_hist)[test_period]
+    # prof_persent <- na.omit(Lag(prof_persent))[test_period]
+    # print(tail(prof_persent,n=10))
+    prof <- prof_persent*buy
+    eq <- exp(cumsum(na.omit(prof)))
+    prof <- tail(eq, n=1) - 1
+    # summarize
+    range <- as.numeric(tail(bb_var, n=1))
+    valid_period <- difftime(valid_to, valid_from, units = 'days')
+    hold_days <- sum(pos_hold)
+    res <- data.frame(matrix(c(range, last_2pos[2], vol, prof, last_buy, !isTRUE(last_2add[1])&isTRUE(last_2add[2]), hold_days, valid_period), nrow=1, ncol=8))
+    colnames(res) <- c("var", "Hold", "Vo", "Prof", "Buy", "Add", "Hold_days", "Period")
+    res$'valid_from' <- as.Date(valid_from)
+    res$'valid_to' <- as.Date(valid_to)
+    rownames(res) <- stock_name
+    # eq3[with(eq3, order(var)), ] # order with column var
+    return(res)
+  }
+  return(pos_hold)
+}
 
 # with the bband and vol and sma the define when to enter
 pick_strategy4 <- function(stock_name, cata = 'TW'
-                           , hist = NULL, n = 22, sd = 2
+                           , hist = NULL, n = 22, sd = 1.5
                            , month = 0, years = 1, from = Sys.time(), pick = FALSE) {
   if (is.null(hist)) {
     if (!(cata == ''))
@@ -133,7 +260,7 @@ pick_strategy4 <- function(stock_name, cata = 'TW'
   # print(tail(bb_data, n=20))
   bb_var <- (bb_data$'up' - bb_data$'dn')/bb_data$'mavg'
   # print(tail(bb_var, n=20))
-  bb_var_limit <- ifelse(bb_var <= 0.18, 1, 0)
+  bb_var_limit <- ifelse(bb_var <= 0.10, 1, 0)
   # print(bb_var_limit)
 
   #2. calulate sma tangling within bbands
@@ -153,7 +280,7 @@ pick_strategy4 <- function(stock_name, cata = 'TW'
   tangle10 <- (ma10<bb_data$'up') & (ma10>bb_data$'dn')
   tangle20 <- (ma20<bb_data$'up') & (ma20>bb_data$'dn')
   tangle60 <- (ma60<bb_data$'up') & (ma60>bb_data$'dn')
-  close <- (Cl(hist)<bb_data$'up') & (Cl(hist)>bb_data$'mavg')
+  close <- (Cl(hist)<bb_data$'up') & (Cl(hist)>bb_data$'dn')
   ma_hold <- bull[test_period] & close[test_period] & tangle5[test_period] & tangle10[test_period] & tangle20[test_period] & tangle60[test_period]
   # print(ma_hold)
   ma_hold <- na.omit(ma_hold)
@@ -168,7 +295,7 @@ pick_strategy4 <- function(stock_name, cata = 'TW'
     # holding position
     last_2pos <- as.numeric(tail(pos_hold, n=2))
     # volumn of last day for the stock
-    vol <- as.numeric(tail(Vo(hist), n=1))/1000
+    vol <- (as.numeric(tail(Vo(hist), n=1))/1000)*tail(Cl(hist), n=1)
     prof <- 0
     # summarize
     range <- as.numeric(tail(bb_var, n=1))
