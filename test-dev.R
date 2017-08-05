@@ -1,7 +1,8 @@
+# bug: 9927 tw
 source("R-dev/r-stock-lib-script.R")
 # strategy for break through shortern, strategy4 for longtern
 do_pick = TRUE
-PROF_VERIFY = TRUE
+PROF_VERIFY = FALSE
 file_name1 = 'pick-today1-strategy5'
 file_name2 = 'pick-today2-strategy5'
 file_name3 = 'pick-today3-strategy5'
@@ -24,25 +25,39 @@ if (isTRUE(do_pick)) {
   pick_all <- rbind(pick, pick_otc)
 
   # Get those stock is NOT held yesterday but DO held today
+  pick_all <- pick_all[with(pick_all, order(Prof, decreasing = TRUE)), ]
   pick_today_buy <- pick_all[pick_all$'Buy'==1,]
   pick_today_add <- pick_all[pick_all$'Add'==1,]
+  pick_today_buy <- pick_today_buy[pick_today_buy$'var'<0.15,]
+  pick_today_buy <- pick_today_buy[pick_today_buy$'Vo'>200,]
+  pick_today_add <- pick_today_add[pick_today_add$'Vo'>200,]
   # order with column var
   # pick_all <- pick_all[with(pick_all, order(var)), ]
-  pick_today_buy <- pick_today_buy[with(pick_today, order(var)), ]
+  pick_today_buy <- pick_today_buy[with(pick_today_buy, order(var)), ]
+  pick_today_buy <- pick_today_buy[with(pick_today_buy, order(Buy_keep, decreasing = TRUE)), ]
   pick_today_add <- pick_today_add[with(pick_today_add, order(var)), ]
   # pick_all_prof <- pick_all[with(pick_all, order(Prof, decreasing = TRUE)), ]
   # write to file
-  f_name <- paste("pick-buy", sep = "", today)
+  if (PROF_VERIFY == TRUE) {
+    f_name <- paste("pick-prof-", sep = "", today)
+    f_name <- paste(f_name, sep = "", ".csv")
+    write.csv(pick_all, file = f_name)
+  }
+  f_name <- paste("pick-buy-", sep = "", today)
   f_name <- paste(f_name, sep = "", ".csv")
   write.csv(pick_today_buy, file = f_name)
 
-  f_name <- paste("pick-add", sep = "-", today)
+  f_name <- paste("pick-add-", sep = "-", today)
   f_name <- paste(f_name, sep = "", ".csv")
   write.csv(pick_today_add, file = f_name)
-  print("> Pick end!")
-  # pick_all[pick_all$Prof < 0,]
+
   prof_mean <- mean(as.numeric(pick_all$'Prof'))
   win_rate <- sum(ifelse(pick_all$'Prof'>=0, 1, 0))/nrow(pick_all)
+  hold_mean <- mean(as.numeric(pick_all$'Hold_days'))
+  print(paste("prof_mean", sep = ":", prof_mean))
+  print(paste("win_rate", sep = ":", win_rate))
+  print(paste("hold_mean", sep = ":", hold_mean))
+  print("> Pick end!")
 }
 ## latest version end
 
@@ -113,7 +128,7 @@ if (isTRUE(do_perf_check)) {
 
 # see single stock analysis
 # source("R-dev/r-stock-lib-script.R")
-# pick_strategy('1216', cata = 'TW', draw = TRUE)
+# pick_strategy5('4402', cata = 'TWO', pick=TRUE, prof_verify=TRUE)
 # pos_plot('2337', cata = 'TW', month = 0, years = 1, from = Sys.time(), FUNC = pick_strategy5)
 # pick_strategy5('2337', cata = 'TW', prof_verify = TRUE, pick = TRUE)
 if (isTRUE(do_pick)) {
