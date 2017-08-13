@@ -1,4 +1,5 @@
-# bug: 9927 tw
+# bug  10: 6150.TWO, 3625.TWO, 3441.TWO, 4976.TW
+# bug -10: 6225.TW, 6287.TWO, 3609.TWO, 6124.TWo
 source("R-dev/r-stock-lib-script.R")
 do_pick = TRUE
 PROF_VERIFY = TRUE

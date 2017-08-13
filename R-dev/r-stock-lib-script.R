@@ -109,6 +109,7 @@ pick_strategy <- function(stock_name, cata = 'TW'
                            , hist = NULL, n = 22, sd = 1.5
                            , month = 0, years = 1, from = Sys.time(), pick = FALSE, prof_verify=FALSE) {
   BB_VAR_RANGE = 0.15
+  DBG = FALSE
   if (is.null(hist)) {
     if (!(cata == ''))
       stock_name <- paste(stock_name, sep = ".", cata)
@@ -126,7 +127,7 @@ pick_strategy <- function(stock_name, cata = 'TW'
   hlc <- cbind(Hi(hist), Lo(hist), Cl(hist))
 
   # need to use 120 ma in rising
-  if (nrow((hist)) < 120) {
+  if (nrow((hist)) < 160) {
     print(paste("> ERROR:: not enough data to calculate SMA", sep = ' ', nrow(hist)))
     return(NA)
   }
@@ -145,12 +146,10 @@ pick_strategy <- function(stock_name, cata = 'TW'
   bb_var_limit <- bb_inband & bb_var_limit
   bb_var_limit <- na.omit(bb_var_limit)
   # print(bb_var_limit)
-  #### criteria test 20170802 vol 5 > 22
-  vo_5 <- runMean(Vo(hist), n = 5)
-  vo_22 <- runMean(Vo(hist), n = 22)
-  vo_limit <- vo_5 > vo_22
   #### criteria 3. get rising trend
-  rising <- (ma60 > ma120)
+  ma_delt <- Delt(ma60, k=30) | Delt(ma120, k=10)
+  rising <- (ma60 > ma120) & (ma_delt > 0)
+  # rising <- (ma_delt30 > 0)
   rising <- na.omit(rising)
 
   ##### 4. get valid period by the longest range 120 ma
@@ -161,48 +160,86 @@ pick_strategy <- function(stock_name, cata = 'TW'
 
   ##### 5-0. check buy_range
   buy_range <- bb_var_limit[test_period] & rising[test_period]
+  # buy_range <- rising[test_period]
+  buy_range <- na.omit(buy_range)
   ##### 5-1. check add_range
-  add_range <- na.omit(Cl(hist)>bb_data$"up")[test_period]
+  add_range <- Cl(hist)>bb_data$"up" & (ma_delt > 0)
+  add_range <- add_range[test_period]
+  add_range <- na.omit(add_range)
   ##### 5-2. check hold range
   hold_range <- Cl(hist) > bb_data$"mavg"
   hold_range <- hold_range[test_period]
-
-  # print(hold_range)
-  #### 7. check whole period if buy_range happened then hold_range
-  if (isTRUE(prof_verify)) {
-    total_range <- ifelse(buy_range, 1, 0)
-    bought <- 0
-    break_through <- 0
-    for (idx in index(hold_range)) {
-      idx <- format(as.Date(idx), "%Y-%m-%d")
-      if (buy_range[idx] == TRUE) {
-        bought <- TRUE
-        # print(idx)
-      }
-      if (bought == TRUE) {
-        keep_critera <- buy_range[idx] | hold_range[idx] | add_range[idx]
-        if (keep_critera >= 1) {
-          total_range[idx] <- 1
-          if (add_range[idx] == TRUE) {
-            break_through <- TRUE
-          }
-          if (break_through == TRUE) {
-            # print(idx)
-            total_range[idx] <- 2
-          }
-        } else
-          total_range[idx] <- 0
-        if (keep_critera == 0) {
-          bought <- FALSE
-          break_through <- FALSE
-        }
-      }
-    }
-  } else {
-    total_range <- buy_range | add_range
-    total_range <- ifelse(total_range, 1, 0)
+  hold_range <- na.omit(hold_range)
+  if (DBG) {
+    print(paste('buy_range_ROW', sep = ": ", nrow(buy_range)))
+    print(paste('buy_range_fr', sep = ": ", head(index(buy_range), n=1)))
+    print(paste('buy_range_to', sep = ": ", tail(index(buy_range), n=1)))
+    print(paste('add_range_ROW', sep = ": ", nrow(add_range)))
+    print(paste('add_range_fr', sep = ": ", head(index(add_range), n=1)))
+    print(paste('add_range_to', sep = ": ", tail(index(add_range), n=1)))
+    print(paste('hold_range_ROW', sep = ": ", nrow(hold_range)))
+    print(paste('hold_range_fr', sep = ": ", head(index(hold_range), n=1)))
+    print(paste('hold_range_to', sep = ": ", tail(index(hold_range), n=1)))
   }
 
+  # print(buy_range)
+  # print(hold_range)
+  #### 7. check whole period if buy_range happened then hold_range
+  if (DBG == FALSE) {
+    # if (isTRUE(prof_verify)&&(nrow(buy_range)>0)) {
+    if (isTRUE(prof_verify)) {
+      total_range <- ifelse(buy_range, 1, 0)
+      bought <- 0
+      break_through <- 0
+      # print(tail(buy_range, n = 10))
+      # print(tail(hold_range, n = 10))
+      # print(tail(add_range, n = 10))
+      for (idx in index(buy_range)) {
+        idx <- format(as.Date(idx), "%Y-%m-%d")
+        # print(paste(idx, sep = ", ", nrow(buy_range[idx])))
+        # if ((nrow(buy_range)==1) && (buy_range[idx] == TRUE)) {
+        # if (buy_range[idx] == TRUE) {
+          # bought <- TRUE
+        # }
+        bought <- tryCatch({
+          if (buy_range[idx] == TRUE)
+            TRUE
+          else
+            bought
+        } , error = function(err) {
+          print(paste("MY_ERROR:  ",err))
+          print(paste(idx, sep = ": ", nrow(buy_range[idx])))
+          bought
+        } , final = {
+        })
+
+        if (bought == TRUE) {
+          keep_critera <- buy_range[idx] | hold_range[idx] | add_range[idx]
+          total_range[idx] <- 1
+          if (keep_critera == TRUE) {
+            total_range[idx] <- 1
+            if (add_range[idx] == TRUE) {
+              break_through <- TRUE
+            }
+            if (break_through == TRUE) {
+              # print(idx)
+              total_range[idx] <- 2
+            }
+          } else {
+            total_range[idx] <- 0
+            bought <- FALSE
+            break_through <- FALSE
+          }
+        }
+      }
+    } else {
+      total_range <- buy_range | add_range
+      total_range <- ifelse(total_range, 1, 0)
+    }
+  } else {
+    total_range <- buy_range
+    # print(rising)
+  }
   pos_hold <- total_range
   # print(pos_hold)
   if(isTRUE(pick)) {
@@ -212,7 +249,7 @@ pick_strategy <- function(stock_name, cata = 'TW'
     last_buy <- as.numeric(tail(buy_range, n=1))
     range <- as.numeric(tail(bb_var, n=1))
     last_bb <- tail(bb_data, n = 1)
-    buy_cumulated <- get_test_period(month = 2, from = tail(index(rising),n=1))
+    buy_cumulated <- get_test_period(month = 1, from = tail(index(rising),n=1))
     vol <- (as.numeric(tail(Vo(hist), n=1))/1000)
     #### calculate the profit
     #### 8. to align the correct gain/loss when we can actually made decision to buy/sell
@@ -221,7 +258,7 @@ pick_strategy <- function(stock_name, cata = 'TW'
     colnames(op_hist) <- "Open"
     prof_persent <- OpOp(op_hist)[test_period]
     prof <- prof_persent*buy
-    eq <- exp(cumsum(na.omit(prof)))
+    eq <- exp(cumsum(na.omit(prof[test_period])))
     prof <- tail(eq, n=1) - 1
     # summarize
     buy_keep <- sum(buy_range[buy_cumulated])
