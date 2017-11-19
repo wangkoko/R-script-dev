@@ -1,5 +1,6 @@
 # bug  10: 6150.TWO, 3625.TWO, 3441.TWO, 4976.TW
-# bug -10: 6225.TW, 6287.TWO, 3609.TWO, 6124.TWo
+# bug -10: 3609.TWO
+# add ma limit
 source("R-dev/r-stock-lib-script.R")
 do_pick = TRUE
 PROF_VERIFY = TRUE
@@ -61,5 +62,5 @@ if (isTRUE(do_pick)) {
 # pick_strategy('4402', cata = 'TWO', pick=TRUE, prof_verify=TRUE)
 # pos_plot('2337', cata = 'TW', month = 0, years = 1, from = Sys.time(), FUNC = pick_strategy)
 if (isTRUE(do_pick)) {
-  plot_show <- lapply(rownames(pick_today), FUN=pos_plot, cata = '', FUNC = pick_strategy2)
+  plot_show <- lapply(rownames(pick_today_buy), FUN=pos_plot, cata = '', month = 0, years = 1, from = Sys.time(), FUNC = pick_strategy, prof_verify=TRUE)
 }

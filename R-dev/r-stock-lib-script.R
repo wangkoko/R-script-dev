@@ -2,7 +2,6 @@ library("quantmod")
 library("RCurl")
 library("XML")
 library(stringr)
-source("R/methods.R")
 require(lubridate)
 
 get_stock_list <- function(cata = 'TW') {
@@ -54,7 +53,7 @@ get_test_period <- function(month=4, years=0, from = Sys.time())
   return(test_period)
 }
 # show the pos in your strategy
-pos_plot <- function(stock_name, cata = 'TW', month = 4, years = 0, from = Sys.time(), n = 22, sd = 1.5, FUNC = pick_strategy, ...)
+pos_plot <- function(stock_name, cata = 'TW', month = 0, years = 1, from = Sys.time(), n = 22, sd = 1.5, FUNC = pick_strategy, ...)
 {
   if (cata == '')
     stock_idx <- stock_name
@@ -75,8 +74,8 @@ pos_plot <- function(stock_name, cata = 'TW', month = 4, years = 0, from = Sys.t
   chartSeries(hist[show_period], name = stock_idx, up.col = 'red', dn.col = 'green')
   plot(addBBands(n = n, sd = sd, maType = "SMA", draw = 'bands', on = 1), legend = NULL)
   if (5 < nrow(hist)) {
-    ma_10<-runMean(Cl(hist),n=5)
-    plot(addTA(ma_10[show_period], on=1, col= 7, legend = NA))
+    ma_5<-runMean(Cl(hist),n=5)
+    plot(addTA(ma_5[show_period], on=1, col= 7, legend = NA))
   }
 
   if (10 < nrow(hist)) {
@@ -98,8 +97,8 @@ pos_plot <- function(stock_name, cata = 'TW', month = 4, years = 0, from = Sys.t
     ma_120<-runMean(Cl(hist),n=120)
     plot(addTA(ma_120[show_period],on=1,col=4, legend = NULL))
   }
-  # hold_price <- (max(Cl(hist[show_period]))*Lag(pos_hold))
-  hold_price <- ifelse(Lag(pos_hold)>1, max(Cl(hist[show_period]))*Lag(pos_hold)/2, min(Cl(hist[show_period]))*Lag(pos_hold))
+  hold_price <- (max(Cl(hist[show_period]))*Lag(pos_hold))
+  # hold_price <- ifelse(Lag(pos_hold)>1, max(Cl(hist[show_period]))*Lag(pos_hold)/2, min(Cl(hist[show_period]))*Lag(pos_hold))
   # print(hold_price)
   plot(addTA(hold_price[show_period],on=1,col=5))
   invisible(readline(prompt="Press [enter] to continue"))
@@ -148,7 +147,11 @@ pick_strategy <- function(stock_name, cata = 'TW'
   # print(bb_var_limit)
   #### criteria 3. get rising trend
   ma_delt <- Delt(ma60, k=30) | Delt(ma120, k=10)
-  rising <- (ma60 > ma120) & (ma_delt > 0)
+  ma_diff5 <- ma5 > ma120
+  ma_diff10 <- ma10 > ma120
+  ma_diff20 <- ma20 > ma120
+  ma_diff60 <- ma60 > ma120
+  rising <- (ma_delt > 0) & ma_diff60 & ma_diff5 & ma_diff10 & ma_diff20
   # rising <- (ma_delt30 > 0)
   rising <- na.omit(rising)
 
@@ -214,18 +217,21 @@ pick_strategy <- function(stock_name, cata = 'TW'
         })
 
         if (bought == TRUE) {
-          keep_critera <- buy_range[idx] | hold_range[idx] | add_range[idx]
+          keep_critera <- buy_range[idx] | add_range[idx]
           total_range[idx] <- 1
           if (keep_critera == TRUE) {
             total_range[idx] <- 1
             if (add_range[idx] == TRUE) {
               break_through <- TRUE
-            }
+            } else
+              break_through <- FALSE
             if (break_through == TRUE) {
               # print(idx)
               total_range[idx] <- 2
             }
-          } else {
+          }
+          else if (hold_range[idx] == FALSE) {
+          # else {
             total_range[idx] <- 0
             bought <- FALSE
             break_through <- FALSE
