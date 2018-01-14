@@ -1,4 +1,3 @@
-library("quantmod")
 library("RCurl")
 library("XML")
 library(stringr)
@@ -18,11 +17,14 @@ eps_sessional_pth <- paste("info-dev/", sep = "",eps_sessional)
 cash_sessional <- "stock-free-cash-sessional"
 cash_sessional <- paste(cash_sessional, sep = "", ".csv")
 cash_sessional_pth <- paste("info-dev/", sep = "",cash_sessional)
-# 4) 近12季 每股淨現金流量，留下 股號|名稱稱|近4季 現金流量: 自由現金流量 = 營業現金流量+投資現金流量
-# note: 淨現金流量 = 營業現金流量+投資現金流量+理財現金流量
+# 4) 近12季 每股淨現金流量，留下 股號|名稱稱|近4季 現金流量: 淨現金流量 = 營業現金流量+投資現金流量+理財現金流量
 net_cash_sessional <- "stock-net-cash-sessional"
 net_cash_sessional <- paste(net_cash_sessional, sep = "", ".csv")
 net_cash_sessional_pth <- paste("info-dev/", sep = "",net_cash_sessional)
+# 5) 近12季 每股營業現金流量，留下 股號|名稱稱|近4季 營業現金流量:真正收進來的現金 扣掉 真正花出去的現金
+earn_cash_sessional <- "stock-earn-cash-sessional"
+earn_cash_sessional <- paste(earn_cash_sessional, sep = "", ".csv")
+earn_cash_sessional_pth <- paste("info-dev/", sep = "",earn_cash_sessional)
 
 growth_stocks <- NA
 stocks_sessional_eps <- NA
@@ -100,6 +102,7 @@ if (1) {
         tmp_sessional$PE <- stock_info$Price/eps_last_4
         tmp_sessional$growth_rate <- (eps_last_4/eps_compare_to)-1
         tmp_sessional$PE_growth <- tmp_sessional$PE/(tmp_sessional$growth_rate*100)
+        tmp_sessional$earn_cash_flow <- NA
         tmp_sessional$free_cash_flow <- NA
         tmp_sessional$net_cash_flow <- NA
         tmp_eps <- cbind(tmp_eps, tmp_sessional)
@@ -116,7 +119,7 @@ if (1) {
   row.names(growthing_stocks) <- c(1:nrow(growthing_stocks))
   #print(growthing_stocks)
 }
-## update free cash flow last 4 session's
+## 3) update free cash flow last 4 session's
 if (1) {
   stock_case_sessional <- read.csv(cash_sessional_pth)
   col_names <- colnames(stock_case_sessional)
@@ -141,7 +144,7 @@ if (1) {
   }
   #print(growthing_stocks)
 }
-## update net cash flow last 4 session's
+## 4) update net cash flow last 4 session's
 if (1) {
   stock_net_cash_sessional <- read.csv(net_cash_sessional_pth)
   col_names <- colnames(stock_net_cash_sessional)
@@ -166,11 +169,38 @@ if (1) {
   }
   #print(growthing_stocks)
 }
+
+## 5) update 每股營業現金流 last 4 session's
+if (1) {
+  stock_earn_cash_sessional <- read.csv(earn_cash_sessional_pth)
+  col_names <- colnames(stock_earn_cash_sessional)
+  len_names <- length(col_names)
+  stock_earn_cash_sessional[,col_names[1]] <- str_extract(stock_earn_cash_sessional[,col_names[1]], "[0-9]+")
+  colnames(stock_earn_cash_sessional) <- c(c('No','Name'),paste('cash',sep='-', c(1:(len_names-2))))
+  # main for 3rd criteria
+  stock_list <- stock_earn_cash_sessional
+  pass_stock_idx <- 1
+  for (idx in 1:c(nrow(stock_list))) {
+    stock_info <- stock_list[idx,]
+    if (stock_info$No == growthing_stocks[pass_stock_idx,1]) {
+      # 計算最後4季CASH加總，模擬一整年份
+      cash_last_4 <- stock_info[(len_names-3):len_names]
+      cash_last_4[,is.na(cash_last_4)] <- 0
+      cash_last_4 <- sum(cash_last_4)
+      growthing_stocks[pass_stock_idx,]$earn_cash_flow = cash_last_4
+      pass_stock_idx <- pass_stock_idx + 1
+      if (pass_stock_idx > NROW(growthing_stocks))
+        break
+    }
+  }
+  #print(growthing_stocks)
+}
 # order with 本益成長比
 potential_target <- growthing_stocks
 # 後處理獲得想要條件 post processing criteria
 #potential_target <- potential_target[potential_target$growth_rate<0.3, ]
-potential_target <- potential_target[potential_target$sessional_sum < potential_target$free_cash_flow, ]
+#potential_target <- potential_target[potential_target$sessional_sum < potential_target$earn_cash_flow, ]
+#potential_target <- potential_target[potential_target$net_cash_flow>0, ]
 #potential_target <- potential_target[potential_target$PE_growth < 1, ]
 potential_target <- potential_target[with(potential_target, order(PE_growth)), ]
 row.names(potential_target) <- c(1:nrow(potential_target))
